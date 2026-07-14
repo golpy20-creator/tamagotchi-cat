@@ -1,1 +1,699 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Тамагочи-котёнок</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffd6f5">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #b8d8ff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+    }
 
+    .device {
+      width: 340px;
+      padding: 24px 20px 48px;
+      border-radius: 180px;
+      background: #ffd6f5;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .screen {
+      width: 220px;
+      height: 180px;
+      background: #e8f4c8;
+      border-radius: 16px;
+      box-shadow: inset 0 0 0 3px #a0b08a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      image-rendering: pixelated;
+      position: relative;
+    }
+
+    .screen-content {
+      text-align: center;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #343434;
+    }
+
+    .pet {
+      font-size: 13px;
+      margin-bottom: 6px;
+      white-space: pre;
+      font-family: "Courier New", monospace;
+    }
+
+    .status {
+      font-size: 9px;
+    }
+
+    .alert-dot {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ff5252;
+      box-shadow: 0 0 6px rgba(255, 82, 82, 0.8);
+      display: none;
+    }
+
+    .buttons-row {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 8px;
+    }
+
+    .tama-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: none;
+      background: #ffe66d;
+      box-shadow: 0 4px 0 #c7a940;
+      cursor: pointer;
+    }
+
+    .tama-btn:active {
+      box-shadow: 0 2px 0 #c7a940;
+      transform: translateY(2px);
+    }
+
+    .btn-labels {
+      display: flex;
+      justify-content: center;
+      gap: 22px;
+      font-size: 9px;
+      margin-top: 6px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <div class="screen">
+      <div class="alert-dot" id="alertDot"></div>
+      <div class="screen-content">
+        <div class="pet" id="petSprite">
+ /\\_/\\
+( o.o )
+ /   \\
+        </div>
+        <div class="status" id="statusText">
+          Ваш котёнок родился!<br />
+          Режим: обычный<br />
+          Стадия: котёнок<br />
+          Возраст: 0 мин.<br />
+          Голод: 0/4<br />
+          Счастье: 4/4<br />
+          Грязь: нет<br />
+          Сон: бодрствует
+        </div>
+      </div>
+    </div>
+
+    <div class="buttons-row">
+      <button class="tama-btn" id="btnLeft"></button>
+      <button class="tama-btn" id="btnMiddle"></button>
+      <button class="tama-btn" id="btnRight"></button>
+      <button class="tama-btn" id="btnSleep"></button>
+    </div>
+
+    <div class="btn-labels">
+      <span>Кормить</span>
+      <span>Статус / уборка</span>
+      <span>Играть / Игра</span>
+      <span>Спать / Проснуться</span>
+    </div>
+  </div>
+
+  <script>
+    const pet = {
+      hunger: 0,
+      happiness: 4,
+      ageMinutes: 0,
+      alive: true,
+      dirty: false,
+      sleeping: false,
+      calling: false,
+      stage: "kitten",   // kitten, teen, adult
+      pose: "front",     // front, left, right, jump, lazy
+      sleepTicks: 0,     // сколько интервалов подряд спит
+    };
+
+    const game = {
+      active: false,
+      currentArrow: null,
+      roundsPlayed: 0,
+      correctAnswers: 0,
+      maxRounds: 5,
+    };
+
+    const statusTextEl = document.getElementById("statusText");
+    const petSpriteEl = document.getElementById("petSprite");
+    const alertDotEl = document.getElementById("alertDot");
+
+    function updateStage() {
+      if (pet.ageMinutes < 1) {
+        pet.stage = "kitten";
+      } else if (pet.ageMinutes < 2) {
+        pet.stage = "teen";
+      } else {
+        pet.stage = "adult";
+      }
+    }
+
+    function getStageLabel() {
+      if (pet.stage === "kitten") return "котёнок";
+      if (pet.stage === "teen") return "подросток";
+      return "взрослый кот";
+    }
+
+    // базовые тела для разных поз и стадий роста
+    function getBodyLinesForPose(pose) {
+      if (pose === "left") {
+        if (pet.stage === "kitten") {
+          return [
+            " /\\_/ ",
+            "( FACE>",
+            " /   \\",
+          ];
+        } else if (pet.stage === "teen") {
+          return [
+            " /\\_/ ",
+            "( FACE>",
+            "/  _  \\",
+          ];
+        } else {
+          return [
+            " /\\_/ ",
+            "( FACE>",
+            "/_/ \\_\\",
+          ];
+        }
+      }
+
+      if (pose === "right") {
+        if (pet.stage === "kitten") {
+          return [
+            " _/\\_\\",
+            "<FACE )",
+            " /   \\",
+          ];
+        } else if (pet.stage === "teen") {
+          return [
+            " _/\\_\\",
+            "<FACE )",
+            "/  _  \\",
+          ];
+        } else {
+          return [
+            " _/\\_\\",
+            "<FACE )",
+            "/_/ \\_\\",
+          ];
+        }
+      }
+
+      if (pose === "jump") {
+        // прыжок: лапы выше, тело приподнято
+        if (pet.stage === "kitten") {
+          return [
+            " /\\_/\\",
+            "( FACE )",
+            "  / \\ ",
+          ];
+        } else if (pet.stage === "teen") {
+          return [
+            " /\\_/\\",
+            "( FACE )",
+            " / ^ \\",
+          ];
+        } else {
+          return [
+            " /\\_/\\",
+            "( FACE )",
+            "/ ^  ^\\",
+          ];
+        }
+      }
+
+      if (pose === "lazy") {
+        // кот лежит на боку
+        if (pet.stage === "kitten") {
+          return [
+            "  /\\__",
+            " ( FACE)",
+            "  \\__/",
+          ];
+        } else if (pet.stage === "teen") {
+          return [
+            "  /\\__",
+            " ( FACE)",
+            " _/  \\_",
+          ];
+        } else {
+          return [
+            "  /\\__",
+            " ( FACE)",
+            "_/____\\_",
+          ];
+        }
+      }
+
+      // стандартная фронтальная поза
+      if (pet.stage === "kitten") {
+        return [
+          " /\\_/\\",
+          "( FACE )",
+          " /   \\",
+        ];
+      } else if (pet.stage === "teen") {
+        return [
+          " /\\_/\\",
+          "( FACE )",
+          "/  _  \\",
+        ];
+      } else {
+        return [
+          " /\\_/\\",
+          "( FACE )",
+          "/_/ \\_\\",
+        ];
+      }
+    }
+
+    function setCatSprite(mood, sleeping, alive, poseOverride = null) {
+      const pose = poseOverride || pet.pose;
+
+      if (!alive) {
+        const lines = [
+          " /\\_/\\",
+          "( x.x )",
+          "  |_| ",
+        ];
+        petSpriteEl.textContent = lines.join("\n");
+        return;
+      }
+
+      if (sleeping) {
+        const lines = [
+          " /\\_/\\",
+          "( -.- ) zz",
+          "  / \\ ",
+        ];
+        petSpriteEl.textContent = lines.join("\n");
+        return;
+      }
+
+      let face;
+      if (mood === "happy") {
+        face = "^.^";
+      } else if (mood === "sad") {
+        face = "T.T";
+      } else {
+        face = "o.o";
+      }
+
+      let body = getBodyLinesForPose(pose);
+      body[1] = body[1].replace("FACE", face);
+      petSpriteEl.textContent = body.join("\n");
+    }
+
+    // двухкадровый прыжок радости
+    function playJumpAnimation(finalMessage) {
+      if (!pet.alive) return;
+
+      // кадр 1: прыжок вверх
+      pet.pose = "jump";
+      setCatSprite("happy", false, true, "jump");
+      statusTextEl.innerHTML =
+        finalMessage + "<br />Котёнок радостно подпрыгивает!";
+
+      // через 1 секунду — второй кадр
+      setTimeout(() => {
+        pet.pose = "front";
+        setCatSprite("happy", false, true, "front");
+        statusTextEl.innerHTML =
+          finalMessage + "<br />Котёнок всё ещё радуется!";
+      }, 1000);
+
+      // ещё через 1 секунду — возврат к обычному статусу
+      setTimeout(() => {
+        pet.pose = "front";
+        renderStatus(finalMessage);
+      }, 2000);
+    }
+
+    // небольшая idle-анимация (виляние хвостом/подскок)
+    function playIdleWiggle() {
+      if (!pet.alive) return;
+      if (game.active) return;
+      if (pet.sleeping) return;
+      if (pet.happiness < 3) return; // только если настроение хорошее
+
+      const originalPose = pet.pose;
+      pet.pose = "jump";
+      setCatSprite("happy", false, true, "jump");
+
+      setTimeout(() => {
+        pet.pose = originalPose || "front";
+        renderStatus("Котёнок весело вильнул хвостом.");
+      }, 700);
+    }
+
+    function renderStatus(message) {
+      alertDotEl.style.display = pet.calling ? "block" : "none";
+
+      if (!pet.alive) {
+        setCatSprite("dead", false, false, "front");
+        statusTextEl.innerHTML =
+          "Котёнок больше не с нами...<br />" +
+          `Стадия: ${getStageLabel()}<br />` +
+          `Возраст: ${pet.ageMinutes.toFixed(1)} мин.`;
+        return;
+      }
+
+      updateStage();
+
+      let mood = "neutral";
+      if (pet.happiness >= 3 && pet.hunger <= 2 && !pet.dirty) {
+        mood = "happy";
+      } else if (pet.happiness <= 1 || pet.hunger >= 3 || pet.dirty) {
+        mood = "sad";
+      }
+
+      setCatSprite(mood, pet.sleeping, true);
+
+      const dirtText = pet.dirty ? "есть" : "нет";
+      const sleepText = pet.sleeping ? "спит" : "бодрствует";
+      const stageLabel = getStageLabel();
+      const modeLabel = game.active ? "мини-игра" : "обычный";
+
+      statusTextEl.innerHTML =
+        (message ? message + "<br />" : "") +
+        `Режим: ${modeLabel}<br />` +
+        `Стадия: ${stageLabel}<br />` +
+        `Возраст: ${pet.ageMinutes.toFixed(1)} мин.<br />` +
+        `Голод: ${pet.hunger}/4<br />` +
+        `Счастье: ${pet.happiness}/4<br />` +
+        `Грязь: ${dirtText}<br />` +
+        `Сон: ${sleepText}`;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function startMiniGame() {
+      if (!pet.alive) {
+        renderStatus("Котёнок уже умер, играть нельзя.");
+        return;
+      }
+
+      game.active = true;
+      game.roundsPlayed = 0;
+      game.correctAnswers = 0;
+      game.currentArrow = null;
+      pet.sleeping = false;
+      pet.calling = false;
+
+      nextGameRound();
+    }
+
+    function nextGameRound() {
+      if (!game.active) return;
+
+      if (game.roundsPlayed >= game.maxRounds) {
+        finishMiniGame();
+        return;
+      }
+
+      const arrow = Math.random() < 0.5 ? "left" : "right";
+      game.currentArrow = arrow;
+      game.roundsPlayed++;
+
+      // во время мини-игры показываем стрелку вместо кота
+      petSpriteEl.textContent = arrow === "left" ? "   ←" : "   →";
+      statusTextEl.innerHTML =
+        `Режим: мини-игра<br />` +
+        `Раунд: ${game.roundsPlayed}/${game.maxRounds}<br />` +
+        `Угадано: ${game.correctAnswers}`;
+    }
+
+    function handleGameAnswer(answer) {
+      if (!game.active || !game.currentArrow) return;
+
+      if (answer === game.currentArrow) {
+        game.correctAnswers++;
+      }
+
+      nextGameRound();
+    }
+
+    function finishMiniGame() {
+      game.active = false;
+      game.currentArrow = null;
+
+      if (game.correctAnswers === 0) {
+        // мультяшная грусть в два шага
+        pet.pose = "front";
+
+        setCatSprite("sad", false, true, "front");
+        statusTextEl.innerHTML =
+          "Мини-игра провалена.<br />Котёнок очень расстроился.";
+
+        setTimeout(() => {
+          setCatSprite("neutral", false, true, "front");
+          statusTextEl.innerHTML =
+            "Котёнок понемногу успокаивается...";
+        }, 1500);
+
+        setTimeout(() => {
+          renderStatus("Котёнок пришёл в себя после неудачи.");
+        }, 3000);
+      } else if (game.correctAnswers <= 2) {
+        pet.happiness = clamp(pet.happiness + 1, 0, 4);
+        pet.pose = "front";
+        setCatSprite("neutral", false, true, "front");
+        renderStatus(
+          `Мини-игра закончена. Угадано: ${game.correctAnswers}. Счастье +1.`
+        );
+      } else {
+        // хороший результат — двухкадровый прыжок радости
+        pet.happiness = clamp(pet.happiness + 2, 0, 4);
+        const msg =
+          `Мини-игра закончена. Угадано: ${game.correctAnswers}. Счастье +2!`;
+        playJumpAnimation(msg);
+      }
+    }
+
+    // таймер жизни (ускоренный)
+    setInterval(() => {
+      if (!pet.alive) return;
+      if (game.active) return;
+
+      pet.ageMinutes += 10 / 60;
+
+      if (pet.sleeping) {
+        pet.hunger = clamp(pet.hunger + 0.25, 0, 4);
+      } else {
+        pet.hunger = clamp(pet.hunger + 0.5, 0, 4);
+      }
+
+      if (!pet.dirty && Math.random() < 0.3) {
+        pet.dirty = true;
+      }
+
+      if (pet.hunger >= 3 || pet.dirty) {
+        pet.happiness = clamp(pet.happiness - 1, 0, 4);
+      }
+
+      if (pet.hunger === 4 && pet.happiness === 0) {
+        pet.alive = false;
+        pet.calling = false;
+      } else {
+        pet.calling = pet.hunger >= 3 || pet.happiness <= 1 || pet.dirty;
+      }
+
+      // считаем, как долго он спит
+      if (pet.sleeping) {
+        pet.sleepTicks += 1;
+      } else {
+        pet.sleepTicks = 0;
+      }
+
+      // если спит долго, иногда падает в "lazy"
+      if (pet.sleeping && pet.sleepTicks >= 3) {
+        if (Math.random() < 0.4) {
+          pet.pose = "lazy";
+        }
+      }
+
+      renderStatus();
+
+      // иногда маленькая idle-анимация, если доволен
+      if (!game.active && pet.alive && !pet.sleeping) {
+        if (Math.random() < 0.1) {
+          playIdleWiggle();
+        }
+      }
+    }, 10000);
+
+    // случайная смена позы (поворот / мини-подскок) каждые 30 секунд
+    setInterval(() => {
+      if (!pet.alive) return;
+      if (game.active) return;
+      if (pet.sleeping) return;
+
+      const poses = ["front", "left", "right", "jump"];
+      const pose = poses[Math.floor(Math.random() * poses.length)];
+      pet.pose = pose;
+
+      let msg;
+      if (pose === "jump") {
+        msg = "Котёнок вскочил, будто что-то заметил.";
+      } else {
+        const messages = [
+          "Котёнок оглядывается по сторонам.",
+          "Котёнок повернулся, как будто что-то услышал.",
+          "Котёнок сменил позу.",
+        ];
+        msg = messages[Math.floor(Math.random() * messages.length)];
+      }
+
+      renderStatus(msg);
+    }, 30000);
+
+    // Кормить
+    document.getElementById("btnLeft").addEventListener("click", () => {
+      if (game.active) {
+        handleGameAnswer("left");
+        return;
+      }
+
+      if (!pet.alive) {
+        renderStatus("Слишком поздно кормить...");
+        return;
+      }
+
+      if (pet.hunger > 0) {
+        pet.hunger = clamp(pet.hunger - 1, 0, 4);
+        pet.calling = false;
+        renderStatus("Вы покормили котёнка.");
+      } else {
+        renderStatus("Котёнок сейчас не голоден.");
+      }
+    });
+
+    // Статус / уборка
+    document.getElementById("btnMiddle").addEventListener("click", () => {
+      if (game.active) {
+        return;
+      }
+
+      if (!pet.alive) {
+        renderStatus("Котёнок уже умер.");
+        return;
+      }
+
+      if (pet.dirty) {
+        pet.dirty = false;
+        pet.calling = false;
+        renderStatus("Вы убрали за котёнком.");
+        return;
+      }
+
+      let moodText = "";
+      if (pet.happiness >= 3) {
+        moodText = "Настроение: хорошее.";
+      } else if (pet.happiness >= 2) {
+        moodText = "Настроение: нейтральное.";
+      } else {
+        moodText = "Настроение: плохое.";
+      }
+      renderStatus(moodText);
+    });
+
+    // Играть / Мини-игра
+    document.getElementById("btnRight").addEventListener("click", () => {
+      if (!pet.alive) {
+        renderStatus("С ним уже нельзя играть.");
+        return;
+      }
+
+      if (game.active) {
+        handleGameAnswer("right");
+        return;
+      }
+
+      if (pet.sleeping) {
+        renderStatus("Котёнок сейчас спит. Используйте кнопку 'Спать / Проснуться', чтобы его разбудить.");
+        return;
+      }
+
+      if (pet.happiness === 4) {
+        startMiniGame();
+        return;
+      }
+
+      pet.happiness = clamp(pet.happiness + 1, 0, 4);
+      pet.calling = false;
+      pet.pose = "front";
+      renderStatus("Вы поиграли с котёнком.");
+    });
+
+    // Спать / Проснуться (четвёртая кнопка)
+    document.getElementById("btnSleep").addEventListener("click", () => {
+      if (!pet.alive) {
+        renderStatus("Котёнок уже умер, ему не нужен сон.");
+        return;
+      }
+
+      if (game.active) {
+        renderStatus("Сначала закончите мини-игру, потом можно уложить котёнка спать.");
+        return;
+      }
+
+      if (pet.sleeping) {
+        pet.sleeping = false;
+        pet.sleepTicks = 0;
+        pet.pose = "front";
+        renderStatus("Вы разбудили котёнка.");
+      } else {
+        pet.sleeping = true;
+        pet.sleepTicks = 0;
+        pet.pose = "front";
+        renderStatus("Котёнок лёг спать.");
+      }
+    });
+
+    renderStatus("Ваш котёнок родился!");
+  </script>
+  <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("sw.js")
+        .catch((err) => console.log("SW registration failed", err));
+    });
+  }
+</script>
+</body>
+</html>
